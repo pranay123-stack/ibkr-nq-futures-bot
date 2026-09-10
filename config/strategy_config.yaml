@@ -1,0 +1,173 @@
+# =====================================================================
+# NQ 6PM Reopen Strategy Configuration
+# =====================================================================
+# This is the ONLY file you need to edit before running the strategy.
+# All settings are documented inline.
+# =====================================================================
+
+# =========================
+# Broker Selection
+# =========================
+broker: "ibkr"              # "ibkr" = Interactive Brokers (only option for now)
+                            # To add a new broker: implement src/brokers/your_broker/
+
+# =========================
+# IBKR Connection Settings
+# =========================
+ibkr:
+  host: "127.0.0.1"
+  port: 7496              # TWS paper=7497, TWS live=7496, Gateway paper=4002, Gateway live=4001
+  client_id: 1            # Must be unique if running multiple bots
+  timeout: 60             # Connection timeout in seconds
+  readonly: false         # Must be false to place orders
+  fill_timeout: 30        # Seconds to wait for market order fill
+  reentry_fill_timeout: 120  # Seconds to wait for limit re-entry fill
+  rate_limit_calls: 45    # Max API calls per period (IBKR limit ~50/sec)
+  rate_limit_period: 1.0  # Rate limit period in seconds
+  market_data_type: 1          # 1=Live (requires subscription), 2=Frozen, 3=Delayed (free), 4=Delayed+Frozen
+
+# =========================
+# Contract Settings
+# =========================
+contract:
+  symbol: "MNQ"           # MNQ = Micro E-mini ($2/pt, ~$1500 margin)
+                          # NQ  = E-mini ($20/pt, ~$18K margin)
+  exchange: "CME"
+  currency: "USD"
+  sec_type: "FUT"
+  expiry: ""              # Leave empty for auto front-month, or "202409" for specific
+  tick_size: 0.25          # Minimum price increment (0.25 for NQ/MNQ)
+
+# =========================
+# Strategy Parameters
+# =========================
+strategy:
+  name: "NQ 6PM Reopen Strategy"
+
+  # Trading session
+  market_reopen_time: "18:00"   # 6 PM EST - futures reopen
+  candle_timeframe_minutes: 5   # First 5-min candle sets direction
+  entry_window_minutes: 30     # Max minutes after 6:05 PM to enter (retries every 30s if delayed data)
+
+  # Key check-in times for potential reversals (EST)
+  # Bot logs position status at these times (once each, no spam)
+  check_in_times:
+    - "06:00"             # Common NQ trend reversal time
+    - "08:30"             # Economic news releases
+    - "09:30"             # NY cash open
+
+  # Previous day high/low as reference levels
+  use_previous_day_levels: true
+
+# =========================
+# Risk Management
+# =========================
+risk:
+  # Position sizing
+  contracts: 1            # Contracts per trade
+  max_contracts: 2        # Hard max (order validation rejects above this)
+
+  # Risk thresholds (in dollars)
+  min_risk_threshold: 300.0     # Warn if risk < this (weak setups per strategy doc)
+  max_risk_per_trade: 500.0     # BLOCK trade if risk > this (wide candle protection)
+  warn_below_risk: true
+
+  # Take profit levels (in points from entry)
+  # MNQ: $2/pt  -> TP1=$40, TP2=$80, TP3=$120, TP4=$160
+  # NQ:  $20/pt -> TP1=$400, TP2=$800, TP3=$1200, TP4=$1600
+  take_profit_levels:
+    tp1: 20.0
+    tp2: 40.0
+    tp3: 60.0
+    tp4: 80.0
+
+  # Partial exit at TP2
+  partial_exit_at_tp2: true
+  partial_exit_quantity: 0.5    # Exit 50% of position
+
+  # Trailing stop management
+  trailing_stop:
+    enabled: true
+    move_to_be_at_tp2: true     # Move SL to breakeven at TP2
+    be_buffer_points: 1.0       # Buffer above BE to cover commissions
+    trail_to_previous_tp: true  # TP3 hit -> SL to TP1, TP4 hit -> SL to TP2
+
+# =========================
+# Re-entry Rules
+# =========================
+reentry:
+  enabled: true
+  max_reentries: 1              # Max 1 re-entry per session
+  max_total_losses: 2           # Stop trading after 2 losses
+  reentry_at_original_price: true  # Re-enter at same price via LIMIT order
+
+# =========================
+# Safety / Kill Switch
+# =========================
+safety:
+  max_daily_loss: 1000.0        # Kill switch triggers if daily P&L drops below -$1000
+  max_consecutive_errors: 10    # Kill switch triggers after 10 consecutive errors
+  max_slippage_points: 5.0      # Log warning if fill slippage exceeds 5 points
+  max_candle_range_points: 100.0  # Skip trade if 6PM candle range > 100 points
+  min_candle_body_ratio: 0.10   # Skip doji candles (body < 10% of range)
+  position_mismatch_check_seconds: 60  # Check strategy vs broker position every 60s
+  stale_data_timeout_seconds: 30       # Flag if no price update for 30s
+
+# =========================
+# Logging
+# =========================
+logging:
+  level: "INFO"                 # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  log_to_console: true
+  colorful_console: true        # ANSI color codes in terminal
+
+  # Timezone display
+  display_timezone: "US/Eastern"
+  show_timezone_suffix: true    # Show "EST" after timestamps
+
+  # Daily session logs (one file per trading day)
+  # e.g. logs/sessions/session_2026-06-25.log
+  enable_session_logs: true
+  session_log_dir: "logs/sessions"
+
+  # Position snapshot interval (logged in strategy.log)
+  position_snapshot_interval_minutes: 15
+
+  # Session summary at 5 PM market halt
+  enable_session_summary: true
+
+# =========================
+# Data Storage
+# =========================
+data:
+  data_dir: "trading_data"          # Each trading day gets its own subfolder
+                                    # e.g. trading_data/2026-06-25/trades.csv
+  save_on_each_trade: true
+
+# =========================
+# Telegram Notifications
+# =========================
+# Sends alerts on: fills, stops, TP hits, session summary,
+# connection loss, kill switch, bot start/stop
+#
+# Setup:
+#   1. Open Telegram, search @BotFather
+#   2. Send /newbot, follow prompts, copy the token
+#   3. Search @userinfobot, send /start, copy your chat_id
+#   4. Paste below and set enabled: true
+notifications:
+  enabled: false
+  telegram_token: ""            # e.g. "7123456789:AAF..."
+  telegram_chat_id: ""          # e.g. "123456789"
+
+# =========================
+# Timezone & Market Hours
+# =========================
+timezone: "US/Eastern"
+
+# NQ futures market schedule (change only if trading a different product)
+market_hours:
+  reopen_hour: 18               # 6 PM - daily session reopen
+  halt_hour: 17                 # 5 PM - daily halt / Friday close
+  close_day: 4                  # Friday (0=Monday, 4=Friday)
+  open_day: 6                   # Sunday (0=Monday, 6=Sunday)

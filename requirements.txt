@@ -1,0 +1,15 @@
+# NQ 6PM Reopen Strategy Dependencies
+# =====================================
+
+# IBKR API Library
+ib_insync>=0.9.86
+
+# Configuration
+PyYAML>=6.0
+
+# Timezone handling
+pytz>=2024.1
+tzdata>=2024.1
+
+# Optional: For enhanced datetime handling
+python-dateutil>=2.8.2

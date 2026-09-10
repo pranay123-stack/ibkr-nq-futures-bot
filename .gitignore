@@ -1,0 +1,9 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.env
+logs/
+trading_data/
+.pytest_cache/
+.benchmarks/
